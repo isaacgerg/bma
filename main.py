@@ -62,7 +62,18 @@ def parseFile(fn):
             if l[0:4] == 'Time': break
                     
     return entries
-
+#---------------------------------------------------------------------------------------------------
+def ksTest(dates, bss, period1, period2):
+    assert(len(dates == len(bss)))
+    d1_idx = np.where(np.logical_and(dates>=period1[0], dates <= period1[1]))
+    d2_idx = np.where(np.logical_and(dates>=period2[0], dates <= period2[1]))
+    s1 = bss[d1_idx]
+    s2 = bss[d2_idx]
+    
+    D, p = sp.stats.ks_2samp(s1,s2)
+    
+    return p
+    
 #---------------------------------------------------------------------------------------------------
 def convolve(dates, bss, time, timeWindow, kernelFunctor):
     N = dates.shape[0]
@@ -95,7 +106,7 @@ def everyday(start, stop):
         
 #---------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
-    fn = r'C:\Users\idg101\Desktop\bm\BowelMove 20150717_174633.txt'
+    fn = r'C:\Users\idg101\Desktop\bm\Sept 28, 2015\BowelMove 20150928_160631.txt'
     
     matplotlib.style.use(r'https://raw.githubusercontent.com/CamDavidsonPilon/Probabilistic-Programming-and-Bayesian-Methods-for-Hackers/master/styles/matplotlibrc')
     
@@ -118,8 +129,7 @@ if __name__ == "__main__":
     g = lambda x: np.histogram(x, bins=7, range=(1,7))[0]
     
     dateRange = everyday(time[-1], time[0])
-
-    
+        
     #h = convolve2d(bss, dateRange, datetime.timedelta(days=14), g)
     #plt.imshow(h); plt.show()
           
@@ -129,6 +139,7 @@ if __name__ == "__main__":
     delta7 = datetime.timedelta(days=7)
     delta14 = datetime.timedelta(days=14)
     delta28 = datetime.timedelta(days=28)
+    delta42 = datetime.timedelta(days=42)
     
     ma1day = convolve(dateRange, bss, time, delta1, np.mean)  
     ma3days = convolve(dateRange, bss, time, delta3, np.mean)        
@@ -145,6 +156,29 @@ if __name__ == "__main__":
     plt.title('Bristol Stool Scale Moving Average')
     plt.savefig('bss - moving average.png')
     
+    startDate1 = datetime.datetime(2015,6,1)
+    stopDate1 = datetime.datetime(2015,7,10)
+    startDate2 = datetime.datetime(2015,7,11)
+    stopDate2 = datetime.datetime(2015,8,20)
+    pValue = ksTest(dateRange, ma3days, (startDate1,stopDate1), (startDate2, stopDate2))
+    print('p-value: {0}'.format(pValue))    
+    
+    # MOving ks test
+    splitDate = datetime.datetime(2015,7,1)
+    pvalues = []
+    times = []
+    for k in np.arange(-7*30,48, dtype=np.int):
+        startDate1 = splitDate + datetime.timedelta(days=int(k)) - delta28
+        stopDate1 = splitDate + datetime.timedelta(days=int(k))
+        startDate2 = splitDate + datetime.timedelta(days=int(k))
+        stopDate2  = startDate2 + delta28
+        times.append(splitDate + datetime.timedelta(days=int(k)))
+        pvalues.append(ksTest(dateRange, ma3days, (startDate1,stopDate1), (startDate2, stopDate2)))
+    fig, ax = plt.subplots(1)
+    ax.semilogy(times, pvalues); plt.ylabel('p-value'); plt.xlabel('Split Date'); plt.title('KS Testing\np-value of Before-After Period of 4 Weeks, 3 day MA');
+    fig.autofmt_xdate()
+    plt.savefig('bss - p-value of Before-After Period of 4 Weeks.png')
+    
     plt.clf(); plt.subplot(311)
     plt.plot(dateRange, ma3days, label='3 days'); plt.ylim(0,8); plt.ylabel('Bristol Stool Scale'); plt.legend(shadow=True)
     plt.subplot(312)
@@ -155,6 +189,9 @@ if __name__ == "__main__":
     plt.ylim(0,8);
     plt.suptitle('Bristol Stool Scale Moving Average')
     plt.savefig('bss - moving average - subplot.png')
+    
+    # KS-testing
+    
 
     plt.clf()
     numMovements3 = convolve(dateRange, bss, time, delta3, lambda x: np.shape(x)[0]) / 3
