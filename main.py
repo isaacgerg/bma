@@ -62,6 +62,29 @@ def parseFile(fn):
             if l[0:4] == 'Time': break
                     
     return entries
+
+#---------------------------------------------------------------------------------------------------
+def pctBetterTest(dates, bss, period1, period2):
+    assert(len(dates == len(bss)))
+    d1_idx = np.where(np.logical_and(dates>=period1[0], dates <= period1[1]))
+    d2_idx = np.where(np.logical_and(dates>=period2[0], dates <= period2[1]))
+    s1 = bss[d1_idx]
+    s2 = bss[d2_idx]
+
+    pctGoodPeriod1 = (np.sum(np.logical_and(s1>=3, s1<=5))/len(s1))
+    pctGoodPeriod2 = (np.sum(np.logical_and(s2>=3, s2<=5))/len(s2))
+    return ((pctGoodPeriod2-pctGoodPeriod1) / pctGoodPeriod1)*100
+
+#---------------------------------------------------------------------------------------------------
+def histogram(dates, bss, period1, numBins=0):
+    assert(len(dates == len(bss)))
+    d1_idx = np.where(np.logical_and(dates>=period1[0], dates <= period1[1]))
+    s1 = bss[d1_idx]
+
+    h = np.histogram(s1, bins=7, range=(1,7))
+
+    return h[0]
+
 #---------------------------------------------------------------------------------------------------
 def ksTest(dates, bss, period1, period2):
     assert(len(dates == len(bss)))
@@ -81,7 +104,7 @@ def convolve(dates, bss, time, timeWindow, kernelFunctor):
     for k in range(N):
         thisTime = dates[k]
         # Select range
-        idx = np.where(np.logical_and(time>(thisTime-timeWindow), time <= thisTime))
+        idx = np.where(np.logical_and(time>=(thisTime-timeWindow), time <= thisTime))
         r[k] = kernelFunctor(bss[idx])
     return r
 #---------------------------------------------------------------------------------------------------
@@ -99,14 +122,14 @@ def everyday(start, stop):
     r = []
     d = datetime.timedelta(days=1)
     k = start
-    while (k<=stop):
+    while (k<=stop+d):
         r.append(k)
         k = k + d
     return np.array(r)
         
 #---------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
-    fn = r'C:\Users\idg101\Desktop\bm\Sept 28, 2015\BowelMove 20150928_160631.txt'
+    fn = r'C:\Users\idg101\Desktop\bm\BowelMove 20151022_161045.txt'
     
     matplotlib.style.use(r'https://raw.githubusercontent.com/CamDavidsonPilon/Probabilistic-Programming-and-Bayesian-Methods-for-Hackers/master/styles/matplotlibrc')
     
@@ -121,11 +144,7 @@ if __name__ == "__main__":
         time.append(k._time)
     bss = np.array(bss)
     time = np.array(time)
-        
-    #h = np.histogram(bss, bins=7, range=(1,8))
-    #plt.pie(h[0], labels=['1', '2', '3', '4', '5', '6', '7'])
-    #plt.show()e
-    
+           
     g = lambda x: np.histogram(x, bins=7, range=(1,7))[0]
     
     dateRange = everyday(time[-1], time[0])
@@ -143,54 +162,183 @@ if __name__ == "__main__":
     
     ma1day = convolve(dateRange, bss, time, delta1, np.mean)  
     ma3days = convolve(dateRange, bss, time, delta3, np.mean)        
-    ma7days = convolve(dateRange, bss, time, delta7, np.mean)        
+    min3days = convolve(dateRange, bss, time, delta3, lambda x: np.min(x) if len(x)>0 else np.nan)     
+    max3days = convolve(dateRange, bss, time, delta3, lambda x: np.max(x) if len(x)>0 else np.nan)     
+    pctGood3days = convolve(dateRange, bss, time, delta3,lambda x: (np.sum(np.logical_and(x>=3, x<=5))/len(x))*100)            
+    #ma7days = convolve(dateRange, bss, time, delta7, lambda x: sp.stats.mode(x)[0][0])        
+    ma7days = convolve(dateRange, bss, time, delta7,np.mean)        
+    pctGood7days = convolve(dateRange, bss, time, delta7,lambda x: (np.sum(np.logical_and(x>=3, x<=5))/len(x))*100)    
+    pctGood28days = convolve(dateRange, bss, time, delta28,lambda x: (np.sum(np.logical_and(x>=3, x<=5))/len(x))*100)            
+    sd7days = convolve(dateRange, bss, time, delta7, np.std)    
     ma14days = convolve(dateRange, bss, time, delta14, np.mean)        
     ma28days = convolve(dateRange, bss, time, delta28, np.mean)        
-    plt.plot(dateRange, ma3days); plt.hold(True)
-    plt.plot(dateRange, ma14days); 
-    plt.plot(dateRange, ma28days); 
-    plt.ylabel('Bristol Stool Scale')
-    plt.xlabel('Date')
-    plt.ylim(0,8); plt.hold(False)
-    plt.legend(('3 days', '14 days', '28 days'))
-    plt.title('Bristol Stool Scale Moving Average')
-    plt.savefig('bss - moving average.png')
     
-    startDate1 = datetime.datetime(2015,6,1)
-    stopDate1 = datetime.datetime(2015,7,10)
-    startDate2 = datetime.datetime(2015,7,11)
-    stopDate2 = datetime.datetime(2015,8,20)
-    pValue = ksTest(dateRange, ma3days, (startDate1,stopDate1), (startDate2, stopDate2))
-    print('p-value: {0}'.format(pValue))    
+    if False:
+        plt.plot(dateRange, ma3days); plt.hold(True)
+        plt.plot(dateRange, ma7days); 
+        plt.plot(dateRange, ma28days); 
+        plt.ylabel('Bristol Stool Scale')
+        plt.xlabel('Date')
+        plt.ylim(0,8); plt.hold(False)
+        plt.legend(('3 days', '7 days', '28 days'))
+        plt.title('Bristol Stool Scale Moving Average')
+        plt.savefig('bss - moving average.png')
     
-    # MOving ks test
-    splitDate = datetime.datetime(2015,7,1)
+    # Moving ks test
+    today = time[0] # rename var "today"
+    lastDay = time[-1]    
     pvalues = []
     times = []
-    for k in np.arange(-7*30,48, dtype=np.int):
-        startDate1 = splitDate + datetime.timedelta(days=int(k)) - delta28
-        stopDate1 = splitDate + datetime.timedelta(days=int(k))
-        startDate2 = splitDate + datetime.timedelta(days=int(k))
+    means = []
+    numDays = (today-lastDay - 2*delta28).days
+    pctBetter = []    
+    for k in range(numDays):
+        startDate1 = lastDay + datetime.timedelta(days=int(k))
+        stopDate1 = startDate1 + delta28
+        startDate2 = stopDate1
         stopDate2  = startDate2 + delta28
-        times.append(splitDate + datetime.timedelta(days=int(k)))
-        pvalues.append(ksTest(dateRange, ma3days, (startDate1,stopDate1), (startDate2, stopDate2)))
+        times.append(startDate2)
+        
+        idx1 = np.logical_and(time>=startDate1, time<=stopDate1)
+        idx2 = np.logical_and(time>=startDate2, time<=stopDate2)
+        d = np.mean(bss[idx2]) - np.mean(bss[idx1])
+        if d<0:
+            d = 64
+        else:
+            d = 255-64
+        means.append(d)
+                
+        pctBetter.append(pctBetterTest(time, bss, (startDate1,stopDate1), (startDate2, stopDate2)))
+        pvalues.append(ksTest(time, bss, (startDate1,stopDate1), (startDate2, stopDate2)))
     fig, ax = plt.subplots(1)
-    ax.semilogy(times, pvalues); plt.ylabel('p-value'); plt.xlabel('Split Date'); plt.title('KS Testing\np-value of Before-After Period of 4 Weeks, 3 day MA');
+    cmap = matplotlib.cm.seismic_r
+    for k in range(len(times)):
+        c = cmap(int(means[k]))
+        ax.semilogy(times[k], pvalues[k], marker='.', markeredgewidth=1, markeredgecolor='black', markersize = 20, color=c)
+    #ax.semilogy(times, pvalues); 
+    
+    
+    plt.ylabel('p-value'); plt.xlabel('Split Date'); plt.title('KS Testing\np-value of Before-After Period of 4 Weeks');
     fig.autofmt_xdate()
     plt.savefig('bss - p-value of Before-After Period of 4 Weeks.png')
     
+    # Pct better scores week 1 compared week 2
+    fig, ax = plt.subplots(1)
+    cmap = matplotlib.cm.seismic_r
+    means = np.array(means)
+    for k in range(len(times)):
+        c = cmap(int(means[k]))
+        ax.plot(times[k], pctBetter[k], marker='.', markeredgewidth=1, markeredgecolor='black', markersize = 20, color=c)
+    plt.ylabel('Percentage Impvoement'); plt.xlabel('Split Date'); plt.title('Percentage Improvement bss=[3,5]\nBefore-After Period of 4 Weeks\nColor indicates BSS change delta');
+    fig.autofmt_xdate()
+    plt.tight_layout()
+    plt.savefig('pct difference - before-after Period of 4 Weeks.png')    
+    
+    # Weekly histogram
+    newestDay = time[0] 
+    lastDay = time[-1]        
+    times = []
+    numWeeks = int((newestDay - lastDay - delta7).days/7)
+    hgram = []
+    for k in range(numWeeks):
+        startDate1 = lastDay + datetime.timedelta(days=int(7*k))
+        stopDate1 = startDate1 + delta7
+        hgram.append(histogram(time, bss, (startDate1,stopDate1)))
+    hgram = np.array(hgram)    
+    fig, ax = plt.subplots(1)
+    
+    plt.imshow(hgram, interpolation='nearest', cmap=matplotlib.cm.gist_heat, extent=[1,7,0, numWeeks], origin='upper'); plt.colorbar(); 
+    plt.ylabel('Weeks in Past'); plt.xlabel('Bristol Stool Score'); plt.title('BSS Histogram - Weekly');
+    plt.savefig('bss - histogram weekly.png')    
+    
+    # Plot all points
+    fig, ax = plt.subplots(1)
+    cmap = [matplotlib.cm.RdBu(0), matplotlib.cm.RdBu(32), matplotlib.cm.RdBu(32*2), (0.5,0.5,0.5,1.0), matplotlib.cm.RdBu(32*5), matplotlib.cm.RdBu(32*6), matplotlib.cm.RdBu(32*7)]
+    for k in range(len(bss)):
+        color = cmap[bss[k]-1]
+        plt.plot(time[k], time[k].hour, '.', marker = '|', markeredgewidth = 5, color=color, markersize=10)
+    plt.ylim(0,24); plt.ylabel('Hour of Day'); plt.xlabel('Date')
+    plt.title('BSS\nRed - 1, Gray - 4, Blue - 7')
+    fig.autofmt_xdate()
+    plt.tight_layout()
+    plt.savefig('bss - type vs time.png')
+    
+    # Boxplot
+    fig, ax = plt.subplots(1)    
+    mat = []
+    for months in range(1,12):
+        r = []
+        for k in range(len(bss)):
+            if time[k].month==months:
+                r.append(bss[k])
+        mat.append(r)
+        
+    plt.boxplot(mat, showmeans=True, whis=[10, 90]); 
+    plt.ylabel('BSS'); plt.ylim(0,8)
+    plt.xlabel('Month')
+    plt.title('Bristol Stool Scale by Month\nWhiskers - 90th Percentile')
+    plt.xticks(range(1,12), ('Jan 2015', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'), rotation=15)
+    plt.tight_layout()
+    plt.savefig('bss - boxplot.png')    
+    
+    
     plt.clf(); plt.subplot(311)
-    plt.plot(dateRange, ma3days, label='3 days'); plt.ylim(0,8); plt.ylabel('Bristol Stool Scale'); plt.legend(shadow=True)
+    plt.plot(dateRange, ma3days, label='3 day MA'); plt.ylim(1,7); plt.ylabel('Bristol Stool Scale'); plt.legend(shadow=True)
+    plt.plot(dateRange, 3*np.ones(len(ma3days)), color='black'); plt.plot(dateRange, 5*np.ones(len(ma3days)), color='black')
+    #plt.hold(True); plt.plot(dateRange, min3days); plt.plot(dateRange, max3days); plt.hold(False)
     plt.subplot(312)
-    plt.plot(dateRange, ma14days, label = '14 days'); plt.ylim(0,8); plt.ylabel('Bristol Stool Scale');  plt.legend(shadow=True)
+    plt.plot(dateRange, ma7days, label = '7 day MA'); plt.ylim(1,7); plt.ylabel('Bristol Stool Scale');  plt.legend(shadow=True)
+    plt.plot(dateRange, 3*np.ones(len(ma3days)), color='black'); plt.plot(dateRange, 5*np.ones(len(ma3days)), color='black')
     plt.subplot(313)
-    plt.plot(dateRange, ma28days, label = '28 days'); plt.ylim(0,8); plt.ylabel('Bristol Stool Scale');  plt.legend(shadow=True)
-    plt.xlabel('Date')
-    plt.ylim(0,8);
-    plt.suptitle('Bristol Stool Scale Moving Average')
+    plt.plot(dateRange, ma28days, label = '28 day MA'); plt.ylim(1,7); plt.ylabel('Bristol Stool Scale');  plt.legend(shadow=True)
+    plt.plot(dateRange, 3*np.ones(len(ma3days)), color='black'); plt.plot(dateRange, 5*np.ones(len(ma3days)), color='black')
+    plt.xlabel('Date'); plt.ylim(1,7);
     plt.savefig('bss - moving average - subplot.png')
     
-    # KS-testing
+    plt.clf(); 
+    plt.subplot(311) 
+    plt.plot(dateRange, pctGood3days, label = '3 day window'); plt.ylabel('Perctage 3-5');  plt.legend(shadow=True, loc=4)    
+    plt.xlabel('Date'); plt.ylim(0,100);    
+    plt.subplot(312) 
+    plt.plot(dateRange, pctGood7days, label = '7 day window'); plt.ylabel('Perctage 3-5');  plt.legend(shadow=True, loc = 4)
+    plt.xlabel('Date'); plt.ylim(0,100);    
+    plt.subplot(313) 
+    plt.plot(dateRange, pctGood28days, label = '28 day window'); plt.ylabel('Perctage 3-5');  plt.legend(shadow=True, loc = 4)
+    plt.xlabel('Date'); plt.ylim(0,100);        
+    plt.suptitle('Bristol Stool Scale Moving Average')    
+    plt.savefig('bss - pct good - subplot.png')
+    
+    # Percentage of BSS 3-5 scores in last day
+    pvalues = []
+    mvalues = []
+    times = []
+    days = (today-lastDay - delta7).days
+    histogramBss3day = np.ones((7,1))
+    sd = []
+    for k in np.arange(-days, 0, dtype=np.int):
+        startDate = today + datetime.timedelta(days=int(k)) - delta7
+        stopDate = today + datetime.timedelta(days=int(k))
+        times.append(stopDate)
+        #assert(len(dates == len(bss)))
+        d1_idx = np.where(np.logical_and(time>=startDate, time<=stopDate))
+        s1 = bss[d1_idx]
+        l = np.sum(np.logical_and(s1>=3, s1<=5))/len(s1)   
+        sd.append(s1.std())
+        mvalues.append(s1.mean())
+        pvalues.append(l*100)       
+        h = np.histogram(s1,bins=7, range=(1,7))
+        histogramBss3day = np.append(histogramBss3day, h[0].reshape((7,1)), axis=1)
+    plt.clf()
+    mvalues = np.array(mvalues)
+    sd = np.array(sd)
+    fig, ax = plt.subplots(1)
+    ax2 = ax.twinx()
+    ax2.grid(False)
+    ax2.plot(times,mvalues, 'g'); ax2.set_ylabel('BSS Score'); ax2.set_ylim(0,7)
+    ax.plot(times, pvalues); ax.set_ylabel('Percentage'); plt.xlabel('Date'); plt.title('Percentage Good Score, 7 day MA');
+    ax2.plot(times, sd, 'r')
+    fig.autofmt_xdate(); ax.set_ylim(0,100)
+    plt.savefig('bss - Percentage good.png')        
     
 
     plt.clf()
@@ -236,55 +384,15 @@ if __name__ == "__main__":
     plt.xlabel('Bristol Stool Scale');
     plt.ylabel('Counts'); 
     plt.savefig('bss histogram.png')     
-    
-    plt.clf()
-    badBss = np.abs(bss - 4)>=2
-    badBssHistPdf = np.histogram(badBss, bins=2)[0]
-    basBssHistPdf = badBssHistPdf / np.sum(badBssHistPdf)
-    plt.pie(basBssHistPdf, labels = ('3-5', '1-2, 6-7'), autopct='%1.1f%%')
-    plt.title('Pie Chart of Good/Bad Bristol Stool Scale')
-    plt.savefig('bss pie chart.png')     
-    
-    plt.clf()
-    ma1day[np.where(np.isnan(ma1day))] = 4  # data imputation
-    ma3days[np.where(np.isnan(ma3days))] = 4  # data imputation
-    plt.subplot(311)
-    plt.acorr(ma1day, normed=True, maxlags=90, label='1 day'); plt.legend()
-    plt.subplot(312)
-    plt.acorr(ma14days, normed=True, maxlags=90, label='14 days');plt.legend()
-    plt.subplot(313)
-    plt.acorr(ma28days, normed=True, maxlags=90, label='28 days');plt.legend()
-    plt.xlabel('Days')    
-    plt.suptitle('Bristol Stool Scale AutoCorr')
-    plt.savefig('bss acorr.png')   
-    
-    plt.clf()
-    plt.subplot(311)
-    plt.acorr(numMovements1, normed=True, maxlags=90,  label='1 day'); plt.legend()
-    plt.subplot(312)
-    plt.acorr(numMovements14, normed=True, maxlags=90,  label='14 day');plt.legend()
-    plt.subplot(313)
-    plt.acorr(numMovements28, normed=True, maxlags=90, label='28 days'); plt.legend()
-    plt.xlabel('Days')    
-    plt.suptitle('Num Movements AutoCorr')
-    plt.savefig('num movements acorr.png')      
-    
-    plt.clf()   
-    plt.hist2d(numMovements1, ma1day, cmap=matplotlib.cm.gist_heat, normed=True, bins=(5,7), range=((0,5),(1,7)))
-    plt.xlabel('Num Movements'); plt.ylabel('Bristol Stool Scale'); plt.colorbar()
-    plt.title('1 day moving average')
-    plt.savefig('density 1 day.png')      
-    
-    plt.clf()   
-    plt.hist2d(numMovements14, ma14days, cmap=matplotlib.cm.gist_heat, normed=True, bins=(5,7), range=((0,5),(1,7)))
-    plt.xlabel('Num Movements'); plt.ylabel('Bristol Stool Scale'); plt.colorbar()
-    plt.title('14 day moving average')
-    plt.savefig('density 14 days.png')   
-    
-    plt.clf()   
-    plt.hist2d(numMovements28, ma28days, cmap=matplotlib.cm.gist_heat, normed=True, bins=(5,7), range=((0,5),(1,7)))
-    plt.xlabel('Num Movements'); plt.ylabel('Bristol Stool Scale'); plt.colorbar()
-    plt.title('28 day moving average')
-    plt.savefig('density 28 days.png')       
+
+    if False:
+        plt.clf()
+        badBss = np.abs(bss - 4)>=2
+        badBssHistPdf = np.histogram(badBss, bins=2)[0]
+        basBssHistPdf = badBssHistPdf / np.sum(badBssHistPdf)
+        plt.pie(basBssHistPdf, labels = ('3-5', '1-2, 6-7'), autopct='%1.1f%%')
+        plt.title('Pie Chart of Good/Bad Bristol Stool Scale')
+        plt.savefig('bss pie chart.png')     
+       
     
     print('done')
