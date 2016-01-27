@@ -10,6 +10,15 @@ import matplotlib.dates
 import matplotlib.style
 
 #---------------------------------------------------------------------------------------------------
+# http://stackoverflow.com/questions/5734438/how-to-create-a-month-iterator
+def month_year_iter( start_month, start_year, end_month, end_year ):
+    ym_start= 12*start_year + start_month - 1
+    ym_end= 12*end_year + end_month
+    for ym in range( ym_start, ym_end ):
+        y, m = divmod( ym, 12 )
+        yield y, m+1
+
+#---------------------------------------------------------------------------------------------------
 class bmEntry:
     def __init__(self, time, bristolType, duration, note):
         self._time = time
@@ -126,12 +135,81 @@ def everyday(start, stop):
         r.append(k)
         k = k + d
     return np.array(r)
+
+#---------------------------------------------------------------------------------------------------
+# http://stackoverflow.com/questions/736043/checking-if-a-string-can-be-converted-to-float-in-python
+def isfloat(value):
+    try:
+        float(value)
+        return True
+    except ValueError:
+        return False
+#---------------------------------------------------------------------------------------------------
+
+def parseHealthSpreadsheet():
+    fn = r'C:\Users\idg101\Desktop\bm\Heath Record - Sheet1.csv'
+    
+    import csv
+    dailyScore = []
+    dayOfWeek = np.zeros(7)
+    dayOfWeekSum = np.zeros(7)
+    date = []
+    with open(fn) as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            dd = row['Date'].split('/')
+            d = datetime.datetime(int(dd[2]), int(dd[0]), int(dd[1]))
+            date.append(d)
+            ds = row['Daily Score']
+            if isfloat(ds):
+                dailyScore.append(float(ds))
+                dayOfWeek[d.weekday()] += float(ds)
+                dayOfWeekSum[d.weekday()] += 1
+            else:
+                dailyScore.append(np.nan)
+    
+    dailyScore = np.array(dailyScore)
+    
+    # Boxplot
+    fig, ax = plt.subplots(1)    
+    mat = []
+    for months in range(1,13):
+        r = []
+        for k in range(len(dailyScore)):
+            if date[k].month==months:
+                if np.isfinite(dailyScore[k]):
+                    r.append(dailyScore[k])
+        mat.append(r)
+
+    plt.boxplot(mat, showmeans=True, whis=[10, 90]); 
+    plt.ylabel('HQI'); plt.ylim(0,5)
+    plt.xlabel('Month')
+    plt.title('Health Quality Index by Month\nWhiskers - 90th Percentile')
+    plt.xticks(range(1,13), ('Jan 2015', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'), rotation=15)
+    plt.tight_layout()
+    plt.savefig('hqi - boxplot.png')        
+    
+    plt.clf()
+    plt.plot(date, dailyScore, label = 'HQI'); plt.ylim(0,5);  plt.legend(shadow=True)
+    plt.xlabel('Date')
+    plt.ylim(0,5);
+    plt.suptitle('Health Quality Index')
+    plt.savefig('hqi.png')      
+    
+    plt.clf()
+    plt.bar(np.arange(0,7),(dayOfWeek/dayOfWeekSum))
+    plt.ylim(0,4)
+    plt.savefig('hqi day of week.png')    
+    return
+    
         
 #---------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
-    fn = r'C:\Users\idg101\Desktop\bm\BowelMove 20151022_161045.txt'
+    fn = r'C:\Users\idg101\Desktop\bm\BowelMove 20160127_165002.txt'    
     
-    matplotlib.style.use(r'https://raw.githubusercontent.com/CamDavidsonPilon/Probabilistic-Programming-and-Bayesian-Methods-for-Hackers/master/styles/matplotlibrc')
+    matplotlib.style.use(r'https://raw.githubusercontent.com/isaacgerg/matplotlibrc/master/matplotlibrc.txt')
+    
+    parseHealthSpreadsheet()
     
     entries = parseFile(fn)
     
@@ -264,20 +342,28 @@ if __name__ == "__main__":
     plt.savefig('bss - type vs time.png')
     
     # Boxplot
-    fig, ax = plt.subplots(1)    
-    mat = []
-    for months in range(1,12):
-        r = []
-        for k in range(len(bss)):
-            if time[k].month==months:
-                r.append(bss[k])
-        mat.append(r)
-        
-    plt.boxplot(mat, showmeans=True, whis=[10, 90]); 
+    months = []
+    years = []
+    scores = []
+    labels = []
+    for k in month_year_iter(time[-1].month, time[-1].year, time[0].month, time[0].year):
+        month = k[1]
+        year = k[0]        
+        labels.append('%d, %d'%(month, year))
+        months.append(month)
+        years.append(year)
+        m = []
+        for k in range(len(time)):
+            if time[k].month == month and time[k].year == year:
+                m.append(bss[k])
+        scores.append(m)
+                        
+    fig, ax = plt.subplots(1)            
+    plt.boxplot(scores, showmeans=True, whis=[10, 90]); 
     plt.ylabel('BSS'); plt.ylim(0,8)
     plt.xlabel('Month')
     plt.title('Bristol Stool Scale by Month\nWhiskers - 90th Percentile')
-    plt.xticks(range(1,12), ('Jan 2015', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'), rotation=15)
+    plt.xticks(range(1,len(months)+1), labels, rotation=15)
     plt.tight_layout()
     plt.savefig('bss - boxplot.png')    
     
@@ -305,7 +391,7 @@ if __name__ == "__main__":
     plt.subplot(313) 
     plt.plot(dateRange, pctGood28days, label = '28 day window'); plt.ylabel('Perctage 3-5');  plt.legend(shadow=True, loc = 4)
     plt.xlabel('Date'); plt.ylim(0,100);        
-    plt.suptitle('Bristol Stool Scale Moving Average')    
+    plt.suptitle('Bristol Stool Scale Moving Average')
     plt.savefig('bss - pct good - subplot.png')
     
     # Percentage of BSS 3-5 scores in last day
