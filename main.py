@@ -334,7 +334,7 @@ if __name__ == "__main__":
     cmap = [matplotlib.cm.RdBu(0), matplotlib.cm.RdBu(32), matplotlib.cm.RdBu(32*2), (0.5,0.5,0.5,1.0), matplotlib.cm.RdBu(32*5), matplotlib.cm.RdBu(32*6), matplotlib.cm.RdBu(32*7)]
     for k in range(len(bss)):
         color = cmap[bss[k]-1]
-        plt.plot(time[k], time[k].hour, '.', marker = '|', markeredgewidth = 5, color=color, markersize=10)
+        plt.plot(time[k], time[k].hour + (time[k].minute/60.0), '.', marker = '|', markeredgewidth = 5, color=color, markersize=10)
     plt.ylim(0,24); plt.ylabel('Hour of Day'); plt.xlabel('Date')
     plt.title('BSS\nRed - 1, Gray - 4, Blue - 7')
     fig.autofmt_xdate()
@@ -471,7 +471,7 @@ if __name__ == "__main__":
     plt.ylabel('Counts'); 
     plt.savefig('bss histogram.png')     
 
-    if False:
+    if True:
         plt.clf()
         badBss = np.abs(bss - 4)>=2
         badBssHistPdf = np.histogram(badBss, bins=2)[0]
